@@ -21,7 +21,7 @@ This project provides a centralized digital platform where users can securely st
 - Frontend: React.js
 - Backend: Node.js, Express.js
 - Database: MongoDB
-- Other Tools: Twilio, Email notifications
+- Other Tools: Axios,Browser Notifictions API, Nodemailer for Email notifications
 
 ## How to Run
 ### Backend
