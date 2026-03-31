@@ -24,19 +24,44 @@ export default function Dashboard() {
 
   const [meds, setMeds] = useState([]);
   const [prescriptions, setPrescriptions] = useState([]);
-  const [activeAlarm, setActiveAlarm] = useState(null);
-  const [snoozedUntil, setSnoozedUntil] = useState(null);
   const [medicines, setMedicines] = useState([]);
+
+  const [activeAlarm, setActiveAlarm] = useState(null);
+  const [followupAlarm, setFollowupAlarm] = useState(null);
+  const [snoozedUntil, setSnoozedUntil] = useState(null);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+
   const [upcomingDoctorVisits, setUpcomingDoctorVisits] = useState([]);
   const [upcomingHospitalVisits, setUpcomingHospitalVisits] = useState([]);
 
   const [sentDoctorNotifications, setSentDoctorNotifications] = useState({});
   const [sentHospitalNotifications, setSentHospitalNotifications] = useState({});
 
+  const [highlightedDoctorVisitId, setHighlightedDoctorVisitId] = useState(null);
+  const [highlightedHospitalVisitId, setHighlightedHospitalVisitId] = useState(null);
+
   const formatDateTime = (date, time) => {
     if (!date) return "-";
     const formattedDate = new Date(date).toLocaleDateString("en-GB");
     return time ? `${formattedDate} at ${time}` : formattedDate;
+  };
+
+  const getDateOnly = (dateValue) => {
+    if (!dateValue) return "";
+    return new Date(dateValue).toISOString().split("T")[0];
+  };
+
+  const showBrowserNotification = (title, body, path) => {
+    if ("Notification" in window && Notification.permission === "granted") {
+      const notification = new Notification(title, { body });
+
+      notification.onclick = () => {
+        window.focus();
+        if (path) {
+          window.location.href = path;
+        }
+      };
+    }
   };
 
   const tips = useMemo(
@@ -67,24 +92,6 @@ export default function Dashboard() {
 
   const [aiIndex, setAiIndex] = useState(0);
 
-  const getDateOnly = (dateValue) => {
-    if (!dateValue) return "";
-    return new Date(dateValue).toISOString().split("T")[0];
-  };
-
-  const showBrowserNotification = (title, body, path) => {
-    if ("Notification" in window && Notification.permission === "granted") {
-      const notification = new Notification(title, { body });
-
-      notification.onclick = () => {
-        window.focus();
-        if (path) {
-          window.location.href = path;
-        }
-      };
-    }
-  };
-
   const activeMedicines = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
 
@@ -107,9 +114,7 @@ export default function Dashboard() {
       const startDate = getDateOnly(med.startDate);
       const endDate = getDateOnly(med.endDate);
 
-      if (!(startDate <= today && endDate >= today)) {
-        return [];
-      }
+      if (!(startDate <= today && endDate >= today)) return [];
 
       const times = Array.isArray(med.times) ? med.times : [];
 
@@ -135,45 +140,73 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    (async () => {
+    const unlockAudio = async () => {
+      if (!alarmAudio.current || audioEnabled) return;
+
       try {
-        const res = await api.get("/medicines");
-        setMeds(res.data || []);
-        setMedicines(res.data || []);
+        alarmAudio.current.volume = 1;
+        await alarmAudio.current.play();
+        alarmAudio.current.pause();
+        alarmAudio.current.currentTime = 0;
+        setAudioEnabled(true);
+        console.log("Audio enabled");
       } catch (err) {
-        console.log("FETCH MEDS ERROR:", err);
+        console.log("Audio blocked until user interaction:", err);
       }
-    })();
-  }, []);
+    };
+
+    const handleFirstInteraction = () => {
+      unlockAudio();
+      window.removeEventListener("click", handleFirstInteraction);
+      window.removeEventListener("keydown", handleFirstInteraction);
+    };
+
+    window.addEventListener("click", handleFirstInteraction);
+    window.addEventListener("keydown", handleFirstInteraction);
+
+    return () => {
+      window.removeEventListener("click", handleFirstInteraction);
+      window.removeEventListener("keydown", handleFirstInteraction);
+    };
+  }, [audioEnabled]);
 
   useEffect(() => {
-    const fetchVisits = async () => {
+    const fetchDashboardData = async () => {
       try {
-        const doctorRes = await api.get("/doctor-visits");
-        const hospitalRes = await api.get("/hospital-visits");
-        const prescriptionRes = await api.get("/prescriptions");
+        const [medRes, doctorRes, hospitalRes, prescriptionRes] = await Promise.all([
+          api.get("/medicines"),
+          api.get("/doctor-visits"),
+          api.get("/hospital-visits"),
+          api.get("/prescriptions"),
+        ]);
+
+        const medicinesData = medRes.data || [];
+        const doctorsData = doctorRes.data || [];
+        const hospitalsData = hospitalRes.data || [];
 
         const todayStr = new Date().toISOString().split("T")[0];
 
-        const upcomingDoctors = (doctorRes.data || []).filter((v) => {
+        const upcomingDoctors = doctorsData.filter((v) => {
           const followDate = getDateOnly(v.follow_up_date);
           return followDate && followDate >= todayStr;
         });
 
-        const upcomingHospitals = (hospitalRes.data || []).filter((v) => {
+        const upcomingHospitals = hospitalsData.filter((v) => {
           const followDate = getDateOnly(v.follow_up_date);
           return followDate && followDate >= todayStr;
         });
 
+        setMeds(medicinesData);
+        setMedicines(medicinesData);
         setUpcomingDoctorVisits(upcomingDoctors);
         setUpcomingHospitalVisits(upcomingHospitals);
         setPrescriptions(prescriptionRes.data || []);
       } catch (err) {
-        console.log(err);
+        console.log("Dashboard fetch error:", err);
       }
     };
 
-    fetchVisits();
+    fetchDashboardData();
   }, []);
 
   useEffect(() => {
@@ -190,8 +223,64 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [aiSuggestions.length]);
 
+  const playAlarmAudio = async () => {
+    if (!alarmAudio.current) return;
+
+    try {
+      alarmAudio.current.currentTime = 0;
+      alarmAudio.current.loop = true;
+      alarmAudio.current.volume = 1;
+      await alarmAudio.current.play();
+      console.log("Alarm sound started");
+    } catch (err) {
+      console.log("Alarm sound blocked:", err);
+      alert("Reminder triggered, but browser blocked sound. Click once anywhere on the page to enable audio.");
+    }
+  };
+
+  const stopAlarmAudio = () => {
+    if (alarmAudio.current) {
+      alarmAudio.current.pause();
+      alarmAudio.current.currentTime = 0;
+      alarmAudio.current.loop = false;
+    }
+  };
+
+  const triggerMedicineAlarm = async (med) => {
+    if (activeAlarm || followupAlarm) return;
+
+    setActiveAlarm(med);
+    await playAlarmAudio();
+
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification("Medicine Reminder 💊", {
+        body: `${med.name} - ${med.dosage || ""} ${med.food_instruction || ""}`,
+      });
+    }
+  };
+
+  const triggerFollowupAlarm = async (type, visit) => {
+    if (activeAlarm || followupAlarm) return;
+
+    setFollowupAlarm({ type, visit });
+    await playAlarmAudio();
+  };
+
+  const stopAllAlarms = () => {
+    setActiveAlarm(null);
+    setFollowupAlarm(null);
+    stopAlarmAudio();
+  };
+
+  const snoozeAlarm = () => {
+    const snoozeTime = new Date();
+    snoozeTime.setMinutes(snoozeTime.getMinutes() + 5);
+    setSnoozedUntil(snoozeTime);
+    stopAllAlarms();
+  };
+
   useEffect(() => {
-    const checkAlarm = () => {
+    const checkMedicineAlarm = () => {
       const now = new Date();
       const hh = now.getHours().toString().padStart(2, "0");
       const mm = now.getMinutes().toString().padStart(2, "0");
@@ -199,6 +288,7 @@ export default function Dashboard() {
       const today = now.toISOString().split("T")[0];
 
       if (snoozedUntil && now < snoozedUntil) return;
+      if (activeAlarm || followupAlarm) return;
 
       for (const med of meds) {
         if (!med?.startDate || !med?.endDate) continue;
@@ -210,20 +300,19 @@ export default function Dashboard() {
 
         const times = Array.isArray(med.times) ? med.times : [];
         if (times.includes(currentTime)) {
-          triggerAlarm(med);
+          triggerMedicineAlarm(med);
           break;
         }
       }
     };
 
-    const interval = setInterval(checkAlarm, 20000);
+    const interval = setInterval(checkMedicineAlarm, 20000);
     return () => clearInterval(interval);
-  }, [meds, snoozedUntil, activeAlarm]);
+  }, [meds, snoozedUntil, activeAlarm, followupAlarm]);
 
   useEffect(() => {
     const checkDoctorNotifications = () => {
-      const now = new Date();
-      const nowMs = now.getTime();
+      const now = new Date().getTime();
 
       upcomingDoctorVisits.forEach((visit) => {
         if (!visit.follow_up_date || !visit.follow_up_time) return;
@@ -232,68 +321,47 @@ export default function Dashboard() {
         const [hours, minutes] = visit.follow_up_time.split(":").map(Number);
         visitDateTime.setHours(hours || 0, minutes || 0, 0, 0);
 
-        const oneDayBefore = new Date(
-          visitDateTime.getTime() - 24 * 60 * 60 * 1000
-        );
-        const oneHourBefore = new Date(
-          visitDateTime.getTime() - 60 * 60 * 1000
-        );
-
-        const oneDayKey = `${visit._id}-1day`;
+        const oneHourBefore = new Date(visitDateTime.getTime() - 60 * 60 * 1000);
         const oneHourKey = `${visit._id}-1hour`;
 
         if (
-          nowMs >= oneDayBefore.getTime() &&
-          nowMs <= oneDayBefore.getTime() + 10 * 60 * 1000 &&
-          !sentDoctorNotifications[oneDayKey]
-        ) {
-          showBrowserNotification(
-            "Doctor Visit Reminder - Tomorrow",
-            `${visit.doctor_name || "Doctor"} | ${visit.hospital_name || "-"} | ${formatDateTime(
-              visit.follow_up_date,
-              visit.follow_up_time
-            )}`,
-            "/doctor-visits"
-          );
-
-          setSentDoctorNotifications((prev) => ({
-            ...prev,
-            [oneDayKey]: true,
-          }));
-        }
-
-        if (
-          nowMs >= oneHourBefore.getTime() &&
-          nowMs <= oneHourBefore.getTime() + 10 * 60 * 1000 &&
+          now >= oneHourBefore.getTime() &&
+          now <= oneHourBefore.getTime() + 60 * 1000 &&
           !sentDoctorNotifications[oneHourKey]
         ) {
           showBrowserNotification(
-            "Doctor Visit Reminder - In 1 Hour",
-            `${visit.doctor_name || "Doctor"} | ${visit.hospital_name || "-"} | ${formatDateTime(
-              visit.follow_up_date,
-              visit.follow_up_time
-            )}`,
+            "Doctor Follow-up Reminder 🩺",
+            `Visit in 1 hour with ${visit.doctor_name || "Doctor"} at ${visit.hospital_name || "-"}`,
             "/doctor-visits"
           );
+
+          triggerFollowupAlarm("doctor", visit);
 
           setSentDoctorNotifications((prev) => ({
             ...prev,
             [oneHourKey]: true,
           }));
+
+          setHighlightedDoctorVisitId(visit._id);
+
+          setTimeout(() => {
+            setHighlightedDoctorVisitId((current) =>
+              current === visit._id ? null : current
+            );
+          }, 10 * 60 * 1000);
         }
       });
     };
 
     checkDoctorNotifications();
-    const interval = setInterval(checkDoctorNotifications, 60 * 1000);
+    const interval = setInterval(checkDoctorNotifications, 60000);
 
     return () => clearInterval(interval);
   }, [upcomingDoctorVisits, sentDoctorNotifications]);
 
   useEffect(() => {
     const checkHospitalNotifications = () => {
-      const now = new Date();
-      const nowMs = now.getTime();
+      const now = new Date().getTime();
 
       upcomingHospitalVisits.forEach((visit) => {
         if (!visit.follow_up_date || !visit.follow_up_time) return;
@@ -302,97 +370,43 @@ export default function Dashboard() {
         const [hours, minutes] = visit.follow_up_time.split(":").map(Number);
         visitDateTime.setHours(hours || 0, minutes || 0, 0, 0);
 
-        const oneDayBefore = new Date(
-          visitDateTime.getTime() - 24 * 60 * 60 * 1000
-        );
-        const oneHourBefore = new Date(
-          visitDateTime.getTime() - 60 * 60 * 1000
-        );
-
-        const oneDayKey = `${visit._id}-1day`;
+        const oneHourBefore = new Date(visitDateTime.getTime() - 60 * 60 * 1000);
         const oneHourKey = `${visit._id}-1hour`;
 
         if (
-          nowMs >= oneDayBefore.getTime() &&
-          nowMs <= oneDayBefore.getTime() + 10 * 60 * 1000 &&
-          !sentHospitalNotifications[oneDayKey]
-        ) {
-          showBrowserNotification(
-            "Hospital Visit Reminder - Tomorrow",
-            `${visit.hospital_name || "Hospital"} | ${visit.location || "-"} | ${formatDateTime(
-              visit.follow_up_date,
-              visit.follow_up_time
-            )}`,
-            "/hospital-visits"
-          );
-
-          setSentHospitalNotifications((prev) => ({
-            ...prev,
-            [oneDayKey]: true,
-          }));
-        }
-
-        if (
-          nowMs >= oneHourBefore.getTime() &&
-          nowMs <= oneHourBefore.getTime() + 10 * 60 * 1000 &&
+          now >= oneHourBefore.getTime() &&
+          now <= oneHourBefore.getTime() + 60 * 1000 &&
           !sentHospitalNotifications[oneHourKey]
         ) {
           showBrowserNotification(
-            "Hospital Visit Reminder - In 1 Hour",
-            `${visit.hospital_name || "Hospital"} | ${visit.location || "-"} | ${formatDateTime(
-              visit.follow_up_date,
-              visit.follow_up_time
-            )}`,
+            "Hospital Follow-up Reminder 🏥",
+            `Visit in 1 hour at ${visit.hospital_name || "Hospital"} ${visit.location ? `(${visit.location})` : ""}`,
             "/hospital-visits"
           );
+
+          triggerFollowupAlarm("hospital", visit);
 
           setSentHospitalNotifications((prev) => ({
             ...prev,
             [oneHourKey]: true,
           }));
+
+          setHighlightedHospitalVisitId(visit._id);
+
+          setTimeout(() => {
+            setHighlightedHospitalVisitId((current) =>
+              current === visit._id ? null : current
+            );
+          }, 10 * 60 * 1000);
         }
       });
     };
 
     checkHospitalNotifications();
-    const interval = setInterval(checkHospitalNotifications, 60 * 1000);
+    const interval = setInterval(checkHospitalNotifications, 60000);
 
     return () => clearInterval(interval);
   }, [upcomingHospitalVisits, sentHospitalNotifications]);
-
-  const triggerAlarm = (med) => {
-    if (activeAlarm) return;
-
-    setActiveAlarm(med);
-
-    if (alarmAudio.current) {
-      alarmAudio.current.currentTime = 0;
-      alarmAudio.current.loop = true;
-      alarmAudio.current.play().catch(() => {});
-    }
-
-    if ("Notification" in window && Notification.permission === "granted") {
-      new Notification("Medicine Reminder 💊", {
-        body: `${med.name} - ${med.dosage || ""} ${med.food_instruction || ""}`,
-      });
-    }
-  };
-
-  const stopAlarm = () => {
-    setActiveAlarm(null);
-    if (alarmAudio.current) {
-      alarmAudio.current.pause();
-      alarmAudio.current.currentTime = 0;
-      alarmAudio.current.loop = false;
-    }
-  };
-
-  const snoozeAlarm = () => {
-    const snoozeTime = new Date();
-    snoozeTime.setMinutes(snoozeTime.getMinutes() + 5);
-    setSnoozedUntil(snoozeTime);
-    stopAlarm();
-  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -481,13 +495,19 @@ export default function Dashboard() {
             upcomingDoctorVisits.slice(0, 3).map((visit) => (
               <div
                 key={visit._id}
-                className="followup-item clickable-followup"
+                className={`followup-item clickable-followup ${
+                  highlightedDoctorVisitId === visit._id ? "followup-soft-highlight" : ""
+                }`}
                 onClick={() =>
                   navigate("/view-doctor-visit", {
                     state: { visit },
                   })
                 }
               >
+                {highlightedDoctorVisitId === visit._id && (
+                  <div className="followup-notification">🔔 Reminder in 1 hour</div>
+                )}
+
                 <p><strong>{visit.doctor_name || "Doctor"}</strong></p>
                 <p>{visit.hospital_name || "-"}</p>
                 <p>{formatDateTime(visit.follow_up_date, visit.follow_up_time)}</p>
@@ -505,13 +525,19 @@ export default function Dashboard() {
             upcomingHospitalVisits.slice(0, 3).map((visit) => (
               <div
                 key={visit._id}
-                className="followup-item clickable-followup"
+                className={`followup-item clickable-followup ${
+                  highlightedHospitalVisitId === visit._id ? "followup-soft-highlight" : ""
+                }`}
                 onClick={() =>
                   navigate("/view-hospital-visit", {
                     state: { visit },
                   })
                 }
               >
+                {highlightedHospitalVisitId === visit._id && (
+                  <div className="followup-notification">🔔 Reminder in 1 hour</div>
+                )}
+
                 <p><strong>{visit.hospital_name || "Hospital"}</strong></p>
                 <p>{visit.location || "-"}</p>
                 <p>{formatDateTime(visit.follow_up_date, visit.follow_up_time)}</p>
@@ -558,10 +584,52 @@ export default function Dashboard() {
           </p>
 
           <div className="alarm-actions">
-            <button className="alarm-btn" onClick={stopAlarm}>Stop</button>
+            <button className="alarm-btn" onClick={stopAllAlarms}>Stop</button>
             <button className="alarm-btn secondary" onClick={snoozeAlarm}>
               Snooze 5 Min
             </button>
+          </div>
+        </div>
+      )}
+
+      {followupAlarm && (
+        <div className="alarm-popup">
+          <h2>
+            {followupAlarm.type === "doctor"
+              ? "🩺 Doctor Follow-up Reminder"
+              : "🏥 Hospital Follow-up Reminder"}
+          </h2>
+
+          {followupAlarm.type === "doctor" ? (
+            <>
+              <p><strong>Doctor:</strong> {followupAlarm.visit.doctor_name || "-"}</p>
+              <p><strong>Hospital:</strong> {followupAlarm.visit.hospital_name || "-"}</p>
+              <p>
+                <strong>Date & Time:</strong>{" "}
+                {formatDateTime(
+                  followupAlarm.visit.follow_up_date,
+                  followupAlarm.visit.follow_up_time
+                )}
+              </p>
+            </>
+          ) : (
+            <>
+              <p><strong>Hospital:</strong> {followupAlarm.visit.hospital_name || "-"}</p>
+              <p><strong>Location:</strong> {followupAlarm.visit.location || "-"}</p>
+              <p>
+                <strong>Date & Time:</strong>{" "}
+                {formatDateTime(
+                  followupAlarm.visit.follow_up_date,
+                  followupAlarm.visit.follow_up_time
+                )}
+              </p>
+            </>
+          )}
+
+          <p className="alarm-sub">Your follow-up visit is in 1 hour.</p>
+
+          <div className="alarm-actions">
+            <button className="alarm-btn" onClick={stopAllAlarms}>Stop</button>
           </div>
         </div>
       )}
@@ -615,7 +683,6 @@ export default function Dashboard() {
                 <th>Food Instruction</th>
               </tr>
             </thead>
-
             <tbody>
               {todaysMedicineSchedule.map((item) => (
                 <tr key={item.key}>
@@ -632,7 +699,7 @@ export default function Dashboard() {
 
       <div className="dash-note">
         <small>
-          If sound doesn’t play: click once anywhere on the page, then it will work.
+          Click once anywhere on the page after opening dashboard to enable reminder sound.
         </small>
       </div>
     </div>

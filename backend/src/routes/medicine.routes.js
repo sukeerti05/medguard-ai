@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import jwt from "jsonwebtoken";
 import Medicine from "../models/Medicine.js";
+import User from "../models/User.js";
 import medicineUpload from "../middlewares/medicineupload.js";
 
 const router = express.Router();
@@ -25,12 +26,20 @@ const verifyToken = (req, res, next) => {
 /* ---------------- BULK ADD ---------------- */
 router.post("/bulk", verifyToken, async (req, res) => {
   try {
+    const loggedInUser = await User.findById(req.user.id);
+
+    if (!loggedInUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
     const medicines = await Medicine.insertMany(
       req.body.map((item) => ({
         ...item,
         user_id: req.user.id,
+        user_email: loggedInUser.email,
       }))
     );
+
     res.status(201).json(medicines);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -47,12 +56,22 @@ router.post(
   ]),
   async (req, res) => {
     try {
-      const medicineImage = req.files?.medicine_image?.[0]?.path?.replace(/\\/g, "/") || "";
+      const loggedInUser = await User.findById(req.user.id);
+
+      if (!loggedInUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const medicineImage =
+        req.files?.medicine_image?.[0]?.path?.replace(/\\/g, "/") || "";
+
       const prescriptionFile =
         req.files?.prescription_file?.[0]?.path?.replace(/\\/g, "/") || "";
 
       const medicine = await Medicine.create({
         user_id: req.user.id,
+        user_email: loggedInUser.email,
+        user_name: loggedInUser.name,
         name: req.body.name,
         type: req.body.type || "",
         dosage: req.body.dosage || "",
@@ -74,7 +93,7 @@ router.post(
       res.status(201).json(medicine);
     } catch (err) {
       console.error("ADD MEDICINE ERROR:", err);
-      res.status(500).json({ message: "Add failed" });
+      res.status(500).json({ message: "Add failed", error: err.message });
     }
   }
 );
@@ -110,6 +129,12 @@ router.put(
         return res.status(404).json({ message: "Medicine not found" });
       }
 
+      const loggedInUser = await User.findById(req.user.id);
+
+      if (!loggedInUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
       medicine.name = req.body.name || medicine.name;
       medicine.type = req.body.type || medicine.type;
       medicine.dosage = req.body.dosage || medicine.dosage;
@@ -117,7 +142,19 @@ router.put(
         req.body.quantity_per_dose || medicine.quantity_per_dose
       );
       medicine.frequency = req.body.frequency || medicine.frequency;
-      medicine.times = req.body.times ? JSON.parse(req.body.times) : medicine.times;
+
+      if (req.body.times) {
+        if (Array.isArray(req.body.times)) {
+          medicine.times = req.body.times;
+        } else {
+          try {
+            medicine.times = JSON.parse(req.body.times);
+          } catch {
+            medicine.times = [req.body.times];
+          }
+        }
+      }
+
       medicine.startDate = req.body.startDate || medicine.startDate;
       medicine.endDate = req.body.endDate || medicine.endDate;
       medicine.food_instruction =
@@ -125,11 +162,20 @@ router.put(
       medicine.prescribed_by = req.body.prescribed_by || medicine.prescribed_by;
       medicine.expiry_date = req.body.expiry_date || medicine.expiry_date;
       medicine.no_of_days = Number(req.body.no_of_days || medicine.no_of_days);
-      medicine.stock_count = Number(req.body.stock_count || medicine.stock_count);
-      medicine.appearance_note = req.body.appearance_note || medicine.appearance_note;
+      medicine.stock_count = Number(
+        req.body.stock_count || medicine.stock_count
+      );
+      medicine.appearance_note =
+        req.body.appearance_note || medicine.appearance_note;
+
+      // keep required user fields during update
+      medicine.user_id = req.user.id;
+      medicine.user_email = loggedInUser.email;
+      medicine.user_name = loggedInUser.name;
 
       const newMedicineImage =
         req.files?.medicine_image?.[0]?.path?.replace(/\\/g, "/") || "";
+
       const newPrescriptionFile =
         req.files?.prescription_file?.[0]?.path?.replace(/\\/g, "/") || "";
 
@@ -142,7 +188,9 @@ router.put(
       }
 
       if (newPrescriptionFile) {
-        const oldPrescriptionPath = path.resolve(medicine.prescription_file || "");
+        const oldPrescriptionPath = path.resolve(
+          medicine.prescription_file || ""
+        );
         if (medicine.prescription_file && fs.existsSync(oldPrescriptionPath)) {
           fs.unlinkSync(oldPrescriptionPath);
         }
@@ -150,10 +198,13 @@ router.put(
       }
 
       await medicine.save();
-      res.json(medicine);
+      res.json({ message: "Medicine updated successfully", medicine });
     } catch (error) {
       console.error("UPDATE MEDICINE ERROR:", error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({
+        message: "Update failed",
+        error: error.message,
+      });
     }
   }
 );

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import API from "../api/axios";
 import "../index.css";
+
 export default function AddHospitalVisit() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -10,7 +11,7 @@ export default function AddHospitalVisit() {
   const [editingId, setEditingId] = useState(null);
   const [ocrFile, setOcrFile] = useState(null);
   const [extracting, setExtracting] = useState(false);
-  
+
   const [form, setForm] = useState({
     hospital_name: "",
     location: "",
@@ -136,12 +137,42 @@ export default function AddHospitalVisit() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const isHospitalStay =
+      form.admission_date.trim() !== "" && form.discharge_date.trim() !== "";
+
+    const onlyOneDateFilled =
+      (form.admission_date.trim() !== "" && form.discharge_date.trim() === "") ||
+      (form.admission_date.trim() === "" && form.discharge_date.trim() !== "");
+
+    if (onlyOneDateFilled) {
+      alert("Please fill both Admission Date and Discharge Date");
+      return;
+    }
+
+    if (
+      isHospitalStay &&
+      (
+        form.ward.trim() === "" ||
+        form.room_number.trim() === "" ||
+        form.bed_number.trim() === "" ||
+        form.bill_amount.toString().trim() === "" ||
+        form.insurance_used.trim() === "" ||
+        form.amount_paid.toString().trim() === ""
+      )
+    ) {
+      alert(
+        "If Admission Date and Discharge Date are entered, please fill Ward, Room Number, Bed Number, Bill Amount, Insurance Used, and Amount Paid."
+      );
+      return;
+    }
+
     try {
       const data = new FormData();
 
       Object.keys(form).forEach((key) => {
         data.append(key, form[key]);
       });
+
       const storedUser = JSON.parse(localStorage.getItem("user"));
       data.append("user_email", storedUser?.email || "");
 
@@ -152,18 +183,14 @@ export default function AddHospitalVisit() {
       for (let i = 0; i < procedureImages.length; i++) {
         data.append("procedure_images", procedureImages[i]);
       }
-const payload = {
-  ...form,
-  entry_mode: entryMode,
-  user_email: storedUser?.email || "",
-};
+
       if (editingId) {
-        await API.put(`/hospital-visits/${editingId}`, payload, {
+        await API.put(`/hospital-visits/${editingId}`, data, {
           headers: { "Content-Type": "multipart/form-data" },
         });
         alert("Hospital visit updated successfully");
       } else {
-        await API.post("/hospital-visits/add", payload, {
+        await API.post("/hospital-visits/add", data, {
           headers: { "Content-Type": "multipart/form-data" },
         });
         alert("Hospital visit saved successfully");
@@ -175,6 +202,9 @@ const payload = {
       alert(err?.response?.data?.message || "Save failed");
     }
   };
+
+  const isHospitalStay =
+    form.admission_date.trim() !== "" && form.discharge_date.trim() !== "";
 
   return (
     <div className="add-hospital-page">
@@ -308,7 +338,6 @@ const payload = {
                 name="admission_date"
                 value={form.admission_date}
                 onChange={handleChange}
-                required
               />
             </div>
 
@@ -325,35 +354,44 @@ const payload = {
 
           <div className="form-row three-cols">
             <div className="form-group">
-              <label>Ward</label>
+              <label>
+                Ward {isHospitalStay && <span style={{ color: "red" }}>*</span>}
+              </label>
               <input
                 type="text"
                 name="ward"
                 value={form.ward}
                 onChange={handleChange}
                 placeholder="Enter ward"
+                required={isHospitalStay}
               />
             </div>
 
             <div className="form-group">
-              <label>Room Number</label>
+              <label>
+                Room Number {isHospitalStay && <span style={{ color: "red" }}>*</span>}
+              </label>
               <input
                 type="text"
                 name="room_number"
                 value={form.room_number}
                 onChange={handleChange}
                 placeholder="Enter room number"
+                required={isHospitalStay}
               />
             </div>
 
             <div className="form-group">
-              <label>Bed Number</label>
+              <label>
+                Bed Number {isHospitalStay && <span style={{ color: "red" }}>*</span>}
+              </label>
               <input
                 type="text"
                 name="bed_number"
                 value={form.bed_number}
                 onChange={handleChange}
                 placeholder="Enter bed number"
+                required={isHospitalStay}
               />
             </div>
           </div>
@@ -382,35 +420,44 @@ const payload = {
 
           <div className="form-row three-cols">
             <div className="form-group">
-              <label>Bill Amount</label>
+              <label>
+                Bill Amount {isHospitalStay && <span style={{ color: "red" }}>*</span>}
+              </label>
               <input
                 type="number"
                 name="bill_amount"
                 value={form.bill_amount}
                 onChange={handleChange}
                 placeholder="Enter bill amount"
+                required={isHospitalStay}
               />
             </div>
 
             <div className="form-group">
-              <label>Insurance Used</label>
+              <label>
+                Insurance Used {isHospitalStay && <span style={{ color: "red" }}>*</span>}
+              </label>
               <input
                 type="text"
                 name="insurance_used"
                 value={form.insurance_used}
                 onChange={handleChange}
                 placeholder="Enter insurance details"
+                required={isHospitalStay}
               />
             </div>
 
             <div className="form-group">
-              <label>Amount Paid</label>
+              <label>
+                Amount Paid {isHospitalStay && <span style={{ color: "red" }}>*</span>}
+              </label>
               <input
                 type="number"
                 name="amount_paid"
                 value={form.amount_paid}
                 onChange={handleChange}
                 placeholder="Enter amount paid"
+                required={isHospitalStay}
               />
             </div>
           </div>

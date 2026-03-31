@@ -47,10 +47,10 @@ const getOneDayBeforeAt9AM = (visitDateTime) => {
   return reminderTime;
 };
 
-// Target 2: same day at 9:00 AM
-const getSameDayAt9AM = (visitDateTime) => {
+// Target 2: same day one hour before follow-up time
+const getOneHourBefore = (visitDateTime) => {
   const reminderTime = new Date(visitDateTime);
-  reminderTime.setHours(9, 0, 0, 0);
+  reminderTime.setHours(reminderTime.getHours() - 1);
   return reminderTime;
 };
 
@@ -76,7 +76,7 @@ export const checkVisitReminders = async () => {
       if (!visitDateTime) continue;
 
       const oneDayBeforeAt9AM = getOneDayBeforeAt9AM(visitDateTime);
-      const sameDayAt9AM = getSameDayAt9AM(visitDateTime);
+      const oneHourBefore = getOneHourBefore(visitDateTime);
 
       console.log(
         "Doctor visit:",
@@ -93,7 +93,7 @@ export const checkVisitReminders = async () => {
 
           await sendReminderEmail({
             to: visit.user_email,
-            subject: "Reminder: Doctor visit tomorrow at 9:00 AM",
+            subject: "Reminder: Doctor visit tomorrow",
             html: `
               <h2>Doctor Visit Reminder</h2>
               <p>Your doctor visit is scheduled for tomorrow.</p>
@@ -116,17 +116,17 @@ export const checkVisitReminders = async () => {
         }
       }
 
-      // Same day at 9 AM
-      if (shouldSendReminder(sameDayAt9AM, now, visit.reminder_9am_sent)) {
+      // Same day 1 hour before
+      if (shouldSendReminder(oneHourBefore, now, visit.reminder_1hour_sent)) {
         try {
-          console.log("📧 Sending doctor same-day 9 AM reminder to:", visit.user_email);
+          console.log("📧 Sending doctor 1-hour reminder to:", visit.user_email);
 
           await sendReminderEmail({
             to: visit.user_email,
-            subject: "Reminder: Doctor visit today at 9:00 AM",
+            subject: "Reminder: Doctor visit in 1 hour",
             html: `
               <h2>Doctor Visit Reminder</h2>
-              <p>Your doctor visit is scheduled for today.</p>
+              <p>Your doctor visit is scheduled in 1 hour.</p>
               <p><strong>Doctor:</strong> ${visit.doctor_name || "-"}</p>
               <p><strong>Hospital:</strong> ${visit.hospital_name || "-"}</p>
               <p><strong>Specialization:</strong> ${visit.specialization || "-"}</p>
@@ -139,10 +139,10 @@ export const checkVisitReminders = async () => {
             `,
           });
 
-          visit.reminder_9am_sent = true;
+          visit.reminder_1hour_sent = true;
           await visit.save();
         } catch (err) {
-          console.error("❌ Doctor 9 AM reminder failed:", err);
+          console.error("❌ Doctor 1-hour reminder failed:", err);
         }
       }
     }
@@ -162,7 +162,7 @@ export const checkVisitReminders = async () => {
       if (!visitDateTime) continue;
 
       const oneDayBeforeAt9AM = getOneDayBeforeAt9AM(visitDateTime);
-      const sameDayAt9AM = getSameDayAt9AM(visitDateTime);
+      const oneHourBefore = getOneHourBefore(visitDateTime);
 
       console.log(
         "Hospital visit:",
@@ -179,7 +179,7 @@ export const checkVisitReminders = async () => {
 
           await sendReminderEmail({
             to: visit.user_email,
-            subject: "Reminder: Hospital visit tomorrow at 9:00 AM",
+            subject: "Reminder: Hospital visit tomorrow",
             html: `
               <h2>Hospital Visit Reminder</h2>
               <p>Your hospital visit is scheduled for tomorrow.</p>
@@ -201,17 +201,17 @@ export const checkVisitReminders = async () => {
         }
       }
 
-      // Same day at 9 AM
-      if (shouldSendReminder(sameDayAt9AM, now, visit.reminder_9am_sent)) {
+      // Same day 1 hour before
+      if (shouldSendReminder(oneHourBefore, now, visit.reminder_1hour_sent)) {
         try {
-          console.log("📧 Sending hospital same-day 9 AM reminder to:", visit.user_email);
+          console.log("📧 Sending hospital 1-hour reminder to:", visit.user_email);
 
           await sendReminderEmail({
             to: visit.user_email,
-            subject: "Reminder: Hospital visit today at 9:00 AM",
+            subject: "Reminder: Hospital visit in 1 hour",
             html: `
               <h2>Hospital Visit Reminder</h2>
-              <p>Your hospital visit is scheduled for today.</p>
+              <p>Your hospital visit is scheduled in 1 hour.</p>
               <p><strong>Hospital:</strong> ${visit.hospital_name || "-"}</p>
               <p><strong>Location:</strong> ${visit.location || "-"}</p>
               <p><strong>Reason:</strong> ${visit.reason || "-"}</p>
@@ -223,10 +223,10 @@ export const checkVisitReminders = async () => {
             `,
           });
 
-          visit.reminder_9am_sent = true;
+          visit.reminder_1hour_sent = true;
           await visit.save();
         } catch (err) {
-          console.error("❌ Hospital 9 AM reminder failed:", err);
+          console.error("❌ Hospital 1-hour reminder failed:", err);
         }
       }
     }

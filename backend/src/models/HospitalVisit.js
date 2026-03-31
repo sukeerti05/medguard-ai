@@ -40,7 +40,6 @@ default:""
 
 admission_date:{
 type:Date,
-required:true
 },
 
 discharge_date:{
@@ -121,10 +120,6 @@ reminder_1day_sent: {
   default: false,
 },
 reminder_1hour_sent: {
-  type: Boolean,
-  default: false,
-},
-reminder_9am_sent: {
   type: Boolean,
   default: false,
 },

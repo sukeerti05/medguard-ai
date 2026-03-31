@@ -76,15 +76,11 @@ const doctorVisitSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    reminder_1day_sent: {
+reminder_1day_sent: {
   type: Boolean,
   default: false,
 },
 reminder_1hour_sent: {
-  type: Boolean,
-  default: false,
-},
-reminder_9am_sent: {
   type: Boolean,
   default: false,
 },

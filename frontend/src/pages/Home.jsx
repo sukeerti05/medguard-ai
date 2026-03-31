@@ -200,7 +200,7 @@ Login / Register
 
 <div className="screenshot-grid">
 
-<img src="/images/dashboard.png" alt="dashboard" />
+<img src="/images/dashboard1.png" alt="dashboard" />
 
 <img src="/images/reminder.png" alt="reminder" />
 

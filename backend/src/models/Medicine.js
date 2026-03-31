@@ -108,6 +108,18 @@ const medicineSchema = new mongoose.Schema(
       type: [doseHistorySchema],
       default: [],
     },
+    user_email: {
+  type: String,
+  required: true,
+},
+ user_name: {
+  type: String,
+  required: true,
+},
+    lastReminderSentAt: {
+  type: String,
+  default: "",
+},
   },
   { timestamps: true }
 );

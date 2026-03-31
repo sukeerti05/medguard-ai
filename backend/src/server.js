@@ -1,6 +1,6 @@
+import "dotenv/config";
 import express from "express";
 import mongoose from "mongoose";
-import dotenv from "dotenv";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -13,9 +13,9 @@ import doctorVisitRoutes from "./routes/doctorVisit.routes.js";
 import hospitalVisitRoutes from "./routes/hospitalVisit.routes.js";
 import medicalRecordRoutes from "./routes/medicalRecord.routes.js";
 import vitalRoutes from "./routes/vital.routes.js";
-import { checkVisitReminders } from "./utils/visitReminderChecker.js";
 
-dotenv.config();
+// import cron only AFTER env is available
+import "./utils/cron.js";
 
 const app = express();
 
@@ -43,12 +43,4 @@ app.use("/api/vitals", vitalRoutes);
 
 app.listen(5000, () => {
   console.log("Server running on port 5000");
-
-  // 🔥 Run once when server starts
-  checkVisitReminders();
-
-  // 🔥 Run every 1 minute
-  setInterval(() => {
-    checkVisitReminders();
-  }, 60 * 1000);
 });
